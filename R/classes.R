@@ -1,0 +1,43 @@
+# Define the general Model class
+setClass(
+  "Model",
+  slots = list(
+    data = "ANY",
+    model_type = "character",
+    fit_result = "ANY"
+  )
+)
+
+#' tmb_data Class
+#'
+#' This class holds the data.
+#'
+#' @slot raw_data A list of data.
+#' @slot TMB
+#' @slot vars Predictor and response variables
+#' @slot lm.form List of dsign matrices based on formula
+#' @slot formula A formula for the model
+#' @slot plot A list of plotting objects
+#' @export
+setClass("tmb_list",
+         slots = list(
+           raw_data = "data.frame",
+           parameters = 'list',
+           vars = 'list',
+           TMB = 'list',
+           formula = 'character',
+           lm.form = 'list',
+           plot = 'list'
+         )
+)
+
+#'TMBmodel class
+#' @slot TMB The TMB obj
+#' @export
+setClass(
+  "tmb_model",
+  contains = "Model",
+  slots = list(
+    TMB = "list"
+  )
+)

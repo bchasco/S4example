@@ -1,0 +1,9 @@
+exportPattern("^[[:alpha:]]+")
+exportClasses("tmb_model",
+              "tmb_list")
+exportMethods('make_tmb_lists',
+              'build_tmb',
+              'plot')
+importFrom("stats", "lm", "rnorm", "runif")
+import('RTMB','lme4', 'ggplot2', 'tidyr', 'dplyr')
+export('f')
