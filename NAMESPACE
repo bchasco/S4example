@@ -4,6 +4,6 @@ exportClasses("tmb_model",
 exportMethods('make_tmb_lists',
               'build_tmb',
               'plot')
-importFrom("stats", "lm", "rnorm", "runif")
+importFrom("stats", "lm", "rnorm", "runif", 'dnorm')
 import('RTMB','lme4', 'ggplot2', 'tidyr', 'dplyr')
 export('f')

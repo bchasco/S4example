@@ -17,7 +17,6 @@ setMethod("make_tmb_lists", "tmb_list", function(object) {
   lm.form <- tryCatch(lme4::lFormula(frm, object@raw_data),
                    error = function(e) e,
                    warning = function(w) w)
-
   if(length(lm.form$message)>0){
     print(lm.form$message)
     lm.form <- tryCatch(model.matrix(frm, object@raw_data),
@@ -28,14 +27,15 @@ setMethod("make_tmb_lists", "tmb_list", function(object) {
     lm.form <- list(X = lm.form,
                     fr = response_var)
 
-    object@parameters <- list(b = rep(0,ncol(lm.form$X)))
+    object@lm.form <- lm.form
     object@lm.form$model_type <- "lm"
+    object@parameters <- list(b = rep(0,ncol(lm.form$X)))
   }else{
+    object@lm.form <- lm.form
+    object@lm.form$model_type <- "lme"
     object@parameters <- list(b = rep(0,ncol(lm.form$X)),
                               re = rep(0,nrow(lm.form$reTrms$Zt)))
-    object@lm.form$model_type <- "lme"
   }
-  object@lm.form <- lm.form
   return(object)
 })
 
@@ -50,18 +50,15 @@ setMethod("make_tmb_lists", "tmb_list", function(object) {
 setMethod("build_tmb", "tmb_list", function(object) {
   tmb.data <<- list() #create in .GlobalEnv
   if("reTrms" %in% names(object@lm.form)){
-    # if(){
       tmb.data[['y']] <<- stats::model.response(object@lm.form$fr)
-    # }
+      tmb.data[['Zt']] <<- object@lm.form$reTrms$Zt
+      tmb.data[['model_type']] <<- object@lm.form$model_type
   }else{
     tmb.data[['y']] <<- object@lm.form$fr
+    tmb.data[['Zt']] <<- NA
+    tmb.data[['model_type']] <<- object@lm.form$model_type
   }
   tmb.data[['mat']] <<- as.matrix(object@lm.form$X)
-  # tmb.data$y <- 1
-  # print(names(tmb.data))
-  # for(i in names(object@data)){
-  #   tmb.data[[i]] <<- object@data[[i]]
-  # }
 
   parameters <<- list()
   # parameters[['b']] <<- object@parameters[[1]]
@@ -70,7 +67,15 @@ setMethod("build_tmb", "tmb_list", function(object) {
   }
   environment(f) <- .GlobalEnv
 
-  obj <- RTMB::MakeADFun(f, parameters)
+  if(tmb.data$model_type=="lme"){
+    obj <- RTMB::MakeADFun(f,
+                           random = c('re'),
+                           parameters)
+  }else{
+    obj <- RTMB::MakeADFun(f,
+                           parameters)
+  }
+
   opt <- nlminb(obj$par, obj$fn, obj$gr)
 
   object@TMB$parameter <- parameters
