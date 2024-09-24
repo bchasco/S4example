@@ -10,4 +10,4 @@ LW <- x %>%
   mutate(idx = row_number()) #%>%
   # pivot_longer(cols = c('Tagged', 'as.Smolt',	'As.Adult.ballard'), names_to = "loc", values_to = "state")
 
-saveRDS(LW,"data/LW.rds")
+save(LW,file = "data/LW.rda")

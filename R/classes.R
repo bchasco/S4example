@@ -16,7 +16,13 @@ setClass(
 #' @slot TMB
 #' @slot vars Predictor and response variables
 #' @slot lm.form List of dsign matrices based on formula
+#' @slot p.lm.form List of dsign matrices based on formula
+#' @slot phi.lm.form List of dsign matrices based on formula
+#' @slot lam.lm.form List of dsign matrices based on formula
 #' @slot formula A formula for the model
+#' @slot p.frm A formula for the model
+#' @slot phi.frm A formula for the model
+#' @slot lam.frm A formula for the model
 #' @slot plot A list of plotting objects
 #' @export
 setClass("tmb_list",
@@ -25,7 +31,13 @@ setClass("tmb_list",
            parameters = 'list',
            vars = 'list',
            TMB = 'list',
+           p.frm = "character",
+           phi.frm = "character",
+           lam.frm = "character",
            formula = 'character',
+           p.lm.form = 'list',
+           phi.lm.form = 'list',
+           lam.lm.form = 'list',
            lm.form = 'list',
            plot = 'list'
          )

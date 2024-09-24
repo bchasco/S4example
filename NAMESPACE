@@ -3,7 +3,7 @@ exportClasses("tmb_model",
               "tmb_list")
 exportMethods('make_tmb_lists',
               'build_tmb',
-              'plot')
+              'marginal_plot')
 importFrom("stats", "lm", "rnorm", "runif", 'dnorm')
 import('RTMB','lme4', 'ggplot2', 'tidyr', 'dplyr')
 export('f')
