@@ -6,6 +6,10 @@ setGeneric("build_tmb", function(object) standardGeneric("build_tmb"))
 setGeneric("marginal_plot", function(x, y = NULL, ...) {
   standardGeneric("marginal_plot")
 })
+# Define the generic function first
+setGeneric("re_plot", function(x, y = NULL, ...) {
+  standardGeneric("re_plot")
+})
 
 #' build
 #'
@@ -29,6 +33,8 @@ setMethod("make_tmb_lists", "tmb_list", function(object) {
     p.lm.form <- tryCatch(model.matrix(p.frm, object@raw_data),
                         error = function(e) e,
                         warning = function(w) w)
+    object@parameters <- append(object@parameters,
+                                list(p.b = rep(0,ncol(p.lm.form))))
     p.df <- model.frame(p.frm, object@raw_data)
     p.res <- p.df[[1]]
     p.lm.form <- list(X = p.lm.form,
@@ -36,8 +42,6 @@ setMethod("make_tmb_lists", "tmb_list", function(object) {
 
     object@p.lm.form <- p.lm.form
     object@p.lm.form$p.model_type <- "lm"
-    object@parameters <- append(object@parameters,
-                                list(p.b = rep(0,ncol(p.lm.form$X))))
   }else{
     object@p.lm.form <- p.lm.form
     object@p.lm.form$p.model_type <- "lme"
@@ -73,6 +77,26 @@ setMethod("make_tmb_lists", "tmb_list", function(object) {
                                                           phi.re = rep(0,nrow(phi.lm.form$reTrms$Zt)),
                                                           phi.re.sig = length(phi.lm.form$reTrms$cnms)))
   }
+
+  # Step 1: Create phi.loc by reshaping and filtering
+  phi.loc <- object@raw_data %>%
+    mutate(id = row_number()) %>%
+    arrange(id) %>%
+    pivot_longer(cols = c(Tagged, as.Smolt, As.Adult.ballard),
+                 names_to = 'loc',
+                 values_to = 'state') %>%
+    filter(loc %in% c('as.Smolt'))
+  #
+  # # Step 2: Create model matrix and combine with 'id'
+  phi.mat <- data.frame(model.matrix(formula(object@phi.tmp.frm), phi.loc)) %>%
+    mutate(id = phi.loc$id) %>%
+    group_by(id) %>%
+  summarise(y_values = list(pick(everything())))
+
+  object@phi.lm.form$phi.mat <- phi.mat[[2]]
+  object@parameters <- append(object@parameters,
+                              list(phi.list.b = rep(0,ncol(phi.mat[[2]][[1]])))
+  )
 
   #lam forms
   lam.lm.form <- tryCatch(lme4::lFormula(lam.frm, object@raw_data),
@@ -145,12 +169,22 @@ setMethod("build_tmb", "tmb_list", function(object) {
   tmb.data[['ch']] <<- as.matrix(object@raw_data[,c('Tagged', 'as.Smolt', 'As.Adult.ballard')])
   tmb.data[["U"]] <<- apply(tmb.data[['ch']],1,function(x){max(which(x>0,arr.ind = TRUE))})
 
+  tmb.data[['phi.list']] <<- list()
+  for(i in 1:length(object@phi.lm.form$phi.mat)){
+    tmb.data[['phi.list']][[i]] <<- as.matrix(object@phi.lm.form$phi.mat[[i]])
+  }
+
+  # tmb.data[['lam.list']] <<- list()
+  # for(i in 1:length(object@phi.list)){
+  #   tmb.data[['lam.list']][[i]] <<- as.matrix(object@lam.list[[i]])
+  # }
+
   parameters <<- list()
   # parameters[['b']] <<- object@parameters[[1]]
   for(i in names(object@parameters)){
     parameters[[i]] <<- object@parameters[[i]]
   }
-  environment(f_CJS) <- .GlobalEnv
+  environment(f_CJS_list) <- .GlobalEnv
 
   random <<- c()
   if(tmb.data$p.model_type=="lme"){
@@ -159,8 +193,11 @@ setMethod("build_tmb", "tmb_list", function(object) {
   if(tmb.data$phi.model_type=="lme"){
     random <<- c(random,"phi.re")
   }
+  if(tmb.data$lam.model_type=="lme"){
+    random <<- c(random,"lam.re")
+  }
 
-  obj <- RTMB::MakeADFun(f_CJS,
+  obj <- RTMB::MakeADFun(f_CJS_list,
                          random = random,
                          parameters)
 

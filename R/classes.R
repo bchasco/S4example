@@ -22,7 +22,10 @@ setClass(
 #' @slot formula A formula for the model
 #' @slot p.frm A formula for the model
 #' @slot phi.frm A formula for the model
+#' @slot phi.tmp.frm A formula for the model
 #' @slot lam.frm A formula for the model
+#' @slot phi.list A list of predictor matrices for phi
+#' @slot lam.list A list of predictor matrices for phi
 #' @slot plot A list of plotting objects
 #' @export
 setClass("tmb_list",
@@ -33,12 +36,15 @@ setClass("tmb_list",
            TMB = 'list',
            p.frm = "character",
            phi.frm = "character",
+           phi.tmp.frm = "character",
            lam.frm = "character",
            formula = 'character',
            p.lm.form = 'list',
            phi.lm.form = 'list',
            lam.lm.form = 'list',
            lm.form = 'list',
+           phi.list = "list",
+           lam.list = 'list',
            plot = 'list'
          )
 )
