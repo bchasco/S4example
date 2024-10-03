@@ -23,9 +23,12 @@ setClass(
 #' @slot p.frm A formula for the model
 #' @slot phi.frm A formula for the model
 #' @slot phi.tmp.frm A formula for the model
+#' @slot lam.tmp.frm A formula for the model
+#' @slot p.tmp.frm A formula for the model
 #' @slot lam.frm A formula for the model
 #' @slot phi.list A list of predictor matrices for phi
 #' @slot lam.list A list of predictor matrices for phi
+#' @slot MR_settings A list of mark-recapture settings
 #' @slot plot A list of plotting objects
 #' @export
 setClass("tmb_list",
@@ -34,10 +37,7 @@ setClass("tmb_list",
            parameters = 'list',
            vars = 'list',
            TMB = 'list',
-           p.frm = "character",
-           phi.frm = "character",
-           phi.tmp.frm = "character",
-           lam.frm = "character",
+           MR_settings = 'list',
            formula = 'character',
            p.lm.form = 'list',
            phi.lm.form = 'list',

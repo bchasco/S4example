@@ -4,24 +4,30 @@ f_CJS_list <- function(parms){
                parms)
 
   nll <- 0
-  pred <- rep(0,nrow(p.mat))
+  # pred <- rep(0,nrow(p.mat))
   p <- matrix(0,nrow(ch),ncol(ch))
   phi <- matrix(0,nrow(ch),ncol(ch))
   lam <- rep(0,ncol(ch))
 
-  lam <- lam.mat%*%lam.b
+  # lam <- lam.mat%*%lam.b
+  for(i in 1:length(phi.list)){
+    lam[i] <- lam.list[[i]]%*%lam.list.b
+  }
   if(lam.model_type=="lme"){
     lam <- lam + t(lam.Zt) %*% lam.re
   }
 
-  p[,2] <- p.mat%*%p.b
-  if(p.model_type=="lme"){
-    p[,2] <- p[,2] + t(p.Zt) %*% p.re
+  for(i in 1:length(p.list)){
+    p[i,2] <- p.list[[i]]%*%p.list.b
+    if(!is.null(dim(p.Zt))){
+      p[i,2] <- p[i,2] + t(p.Zt[,i]) %*% p.re
+    }
   }
   p[,2] <- RTMB::plogis(p[,2])
   p[,3] <- RTMB::plogis(lam)
 
-  phi[,2] <- phi.mat%*%phi.b
+
+  # phi[,2] <- phi.mat%*%phi.b
   for(i in 1:length(phi.list)){
     phi[i,2] <- phi.list[[i]]%*%phi.list.b
   }
@@ -65,8 +71,6 @@ f_CJS_list <- function(parms){
     RTMB::REPORT(lam.re)
   }
 
-  RTMB::REPORT(p.mat)
-  RTMB::REPORT(phi.mat)
   RTMB::REPORT(ch)
   RTMB::REPORT(phi)
   RTMB::REPORT(chi)

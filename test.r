@@ -2,55 +2,46 @@ library(tidyr)
 library(dplyr)
 
 rm(list=ls())
+
+
 #Build simple data
-LW$fYear <- factor(LW$Year, levels = sort(unique(LW$Year)))
-#
-# # Step 1: Create phi.loc by reshaping and filtering
-# phi.loc <- LW %>%
-#   mutate(id = row_number()) %>%
-#   arrange(id) %>%
-#   pivot_longer(cols = c(Tagged, as.Smolt, As.Adult.ballard),
-#                names_to = 'loc',
-#                values_to = 'state') %>%
-#   filter(loc %in% c('as.Smolt'))
-#
-# # Step 2: Create model matrix and combine with 'id'
-# phi.frm <- 'state ~ ReleaseSite + Year'
-# phi.mat <- data.frame(model.matrix(as.formula(phi.frm), phi.loc)) %>%
-#   mutate(id = phi.loc$id) %>%
-#   group_by(id) %>%
-#   summarise(y_values = list(pick(everything())))
-#
-# # Step 1: Create phi.loc by reshaping and filtering
-# lam.loc <- LW %>%
-#   mutate(id = row_number()) %>%
-#   arrange(id) %>%
-#   pivot_longer(cols = c(Tagged, as.Smolt, As.Adult.ballard),
-#                names_to = 'loc',
-#                values_to = 'state') %>%
-#   filter(loc %in% c('As.Adult.ballard'))
-#
-# # Step 2: Create model matrix and combine with 'id'
-# lam.frm <- 'state ~ Year'
-#
-# lam.mat <- data.frame(model.matrix(as.formula(lam.frm), lam.loc)) %>%
-#   mutate(id = lam.loc$id) %>%
-#   group_by(id) %>%
-#   summarise(y_values = list(pick(everything())))
+lbin <- 5
+x <- read.csv("data/ch_2023.csv")
+
+LW <- x %>%
+  filter(Length < 180) %>%
+  select(Tagged, as.Smolt,	As.Adult.ballard, Year, ReleaseSite, Length, ReleaseWeek) %>%
+  filter(ReleaseSite %in% c("LWBEAR", 'LWCEDR')) %>%
+  group_by(Tagged, as.Smolt,	As.Adult.ballard, Year, ReleaseSite) %>%
+  summarise(n = n()) %>%
+  ungroup() %>%
+  mutate(idx = row_number()) %>%
+  mutate(y_i = factor(Year, levels = sort(unique(LW$Year)))
+         # ,l_i = factor(ceiling(Length/lbin)*lbin,
+         #              levels = sort(unique(ceiling(LW$Length/lbin)*lbin)))
+  )
+
+MR_settings <- list(
+  data = na.omit(data.frame(LW)),
+  frms = list(
+    phi = 'state ~ (1|ReleaseSite:y_i)', #Survival
+    p = 'state ~  (1|y_i)', #Detection probability for smolts at the locks.
+    lam = 'state ~  (1|ReleaseSite:y_i)'  #Dummy last location, The locks as adults
+  ),
+  make_sd = TRUE
+)
 
 tmb_list <- new("tmb_list",
                 raw_data = na.omit(data.frame(LW)), #as.data.frame(do.call(cbind,Orange)),
-                phi.frm = 'Tagged ~ 1',
-                phi.tmp.frm = 'state ~ ReleaseSite + poly(Length,1) + fYear',
-                p.frm = 'Tagged ~ 1',
-                lam.frm = 'Tagged ~ 1'
-)
-
+                MR_settings = MR_settings)
 tmb_obj <- make_tmb_lists(tmb_list)
-tmb_model <- build_tmb(tmb_obj)
-marginal_plot(tmb_model,
-     proc = 'phi',
-     columns = 'Length')
+x <- build_tmb(tmb_obj)
 
-# plot(tmb_model@TMB$rep$lam.re, type="l")
+plot(obj = x,
+     type = "re",
+     process = 'phi',
+     factor = NULL,
+     var = NULL)
+AIC(x)
+
 
