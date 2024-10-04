@@ -33,18 +33,12 @@ setClass(
 #' @export
 setClass("tmb_list",
          slots = list(
-           raw_data = "data.frame",
            parameters = 'list',
-           vars = 'list',
            TMB = 'list',
            MR_settings = 'list',
-           formula = 'character',
            p.lm.form = 'list',
            phi.lm.form = 'list',
            lam.lm.form = 'list',
-           lm.form = 'list',
-           phi.list = "list",
-           lam.list = 'list',
            plot = 'list'
          )
 )

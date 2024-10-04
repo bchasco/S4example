@@ -23,35 +23,56 @@ setGeneric("AIC", function(object) standardGeneric("AIC"))
 #' @export
 # Method building lists of data and parameters for the model
 setMethod("make_tmb_lists", "tmb_list", function(object) {
+
+
   for(i in c('p','phi','lam')){
 
+
     if(i!='lam'){
-      state_loc <- 'as.Smolt'
+      state_loc <- object@MR_settings$locs[1]
     }else{
-      state_loc <- 'As.Adult.ballard'
+      state_loc <- object@MR_settings$locs[length(object@MR_settings$locs)]
     }
 
     i.lm.form <- paste0(i,'.lm.form')
-
-    assign(paste0(i,'.loc'),
-           object@raw_data %>%
+    i.loc <-  paste0(i,'.loc')
+    i.mat <-  paste0(i,'.mat')
+    locs <- object@MR_settings$locs
+    assign(i.loc,
+           object@MR_settings$data %>%
             mutate(id = row_number()) %>%
             arrange(id) %>%
-            pivot_longer(cols = c(Tagged, as.Smolt, As.Adult.ballard),
+            pivot_longer(cols = !!locs,
                          names_to = 'loc',
                          values_to = 'state') %>%
-            filter(loc %in% state_loc))
+            mutate(loc = factor(loc, levels = locs))# %>%
 
+            # filter(loc %in% object$MR_settings$locs[2:(length(object$MR_settings$locs)-1)]))
+           )
+    if(i=='lam'){
+      temp_data <- get(i.loc) %>%
+        filter(loc %in% c(locs[length(locs)])) %>%
+        droplevels()
+      # Now assign it back
+      assign(i.loc, temp_data)
+      }else{
+      temp_data <- get(i.loc) %>%
+        filter(loc %in% c(locs[2:(length(locs)-1)])) %>%
+        droplevels()
+      # Now assign it back
+      assign(i.loc, temp_data)    }
+
+    #
     assign(i.lm.form,
-           tryCatch(lme4::lFormula(formula(object@MR_settings$frms[i][[1]]), get(paste0(i,'.loc'))),
+           tryCatch(lme4::lFormula(formula(object@MR_settings$frms[i][[1]]), get(i.loc)),
                     error = function(e) e,
                     warning = function(w) w)
            )
-
+  #
     if(length(get(i.lm.form)$message)>0){
-      #No random-effects
+      # No random-effects
       assign(i.lm.form,
-             tryCatch(model.matrix(formula(object@MR_settings$frms[i][[1]]), get(paste0(i,'.loc'))),
+             tryCatch(model.matrix(formula(object@MR_settings$frms[i][[1]]), get(i.loc)),
                       error = function(e) e,
                       warning = function(w) w))
       assign(paste0(i,'.mat'),
@@ -59,10 +80,10 @@ setMethod("make_tmb_lists", "tmb_list", function(object) {
                       mutate(id = get(paste0(i,'.loc'))$id) %>%
                       group_by(id) %>%
                       summarise(y_values = list(pick(everything()))))
-
+  #
       assign(i.lm.form, list(X = get(i.lm.form)))
-      slot(object,i.lm.form)[[paste0(i,'.data')]] <- get(paste0(i,'.loc'))
-      slot(object,i.lm.form)[[paste0(i,'.mat')]] <- get(paste0(i,'.mat'))[[2]]
+      slot(object,i.lm.form)[[paste0(i,'.data')]] <- get(i.loc)
+      slot(object,i.lm.form)[[paste0(i,'.mat')]] <- get(i.mat)[[2]]
       slot(object,i.lm.form)[[i.lm.form]] <- get(i.lm.form)
       slot(object,i.lm.form)[[paste0(i,".model_type")]] <- "lm"
 
@@ -77,6 +98,7 @@ setMethod("make_tmb_lists", "tmb_list", function(object) {
                group_by(id) %>%
                summarise(y_values = list(pick(everything()))))
       slot(object,i.lm.form)[[paste0(i,'.mat')]] <- get(paste0(i,'.mat'))[[2]]
+      slot(object,i.lm.form)[[paste0(i,'.Lind')]] <- get(paste0(i,'.mat'))[[2]]
     }
 
     if(slot(object, i.lm.form)[[paste0(i,".model_type")]] == "lm"){
@@ -86,7 +108,7 @@ setMethod("make_tmb_lists", "tmb_list", function(object) {
       slot(object,'parameters')[[paste0(i,'.re')]] <- rep(0,nrow(slot(object,i.lm.form)[[i.lm.form]]$reTrms$Zt))
       slot(object,'parameters')[[paste0(i,'.re.sig')]] <- rep(0,length(slot(object,i.lm.form)[[i.lm.form]]$reTrms$cnms))
     }
-
+  #
   }
   return(object)
 })
@@ -101,9 +123,10 @@ setMethod("make_tmb_lists", "tmb_list", function(object) {
 # Method building and runnning the tmb model
 setMethod("build_tmb", "tmb_list", function(object) {
   tmb.data <<- list() #create in .GlobalEnv
-  tmb.data[['n']] <<- object@raw_data$n
+  tmb.data[['n']] <<- object@MR_settings$data$n
   if("reTrms" %in% names(object@phi.lm.form$phi.lm.form)){
       tmb.data[['phi.Zt']] <<- as.matrix(object@phi.lm.form$phi.lm.form$reTrms$Zt)
+      tmb.data[['phi.Lind']] <<- as.matrix(object@phi.lm.form$phi.lm.form$reTrms$Lind)
   }else{
     tmb.data[['phi.Zt']] <<- NA
   }
@@ -111,6 +134,7 @@ setMethod("build_tmb", "tmb_list", function(object) {
 
   if("reTrms" %in% names(object@p.lm.form$p.lm.form)){
     tmb.data[['p.Zt']] <<- as.matrix(object@p.lm.form$p.lm.form$reTrms$Zt)
+    tmb.data[['p.Lind']] <<- as.matrix(object@p.lm.form$p.lm.form$reTrms$Lind)
   }else{
     tmb.data[['p.Zt']] <<- NA
   }
@@ -118,6 +142,7 @@ setMethod("build_tmb", "tmb_list", function(object) {
 
   if("reTrms" %in% names(object@lam.lm.form$lam.lm.form)){
     tmb.data[['lam.Zt']] <<- as.matrix(object@lam.lm.form$lam.lm.form$reTrms$Zt)
+    tmb.data[['lam.Lind']] <<- as.matrix(object@lam.lm.form$lam.lm.form$reTrms$Lind)
   }else{
     tmb.data[['lam.Zt']] <<- NA
   }
@@ -125,7 +150,7 @@ setMethod("build_tmb", "tmb_list", function(object) {
 
 
 
-  tmb.data[['ch']] <<- as.matrix(object@raw_data[,c('Tagged', 'as.Smolt', 'As.Adult.ballard')])
+  tmb.data[['ch']] <<- as.matrix(object@MR_settings$data[,object@MR_settings$locs])
   tmb.data[["U"]] <<- apply(tmb.data[['ch']],1,function(x){max(which(x>0,arr.ind = TRUE))})
 
   tmb.data[['phi.list']] <<- list()
@@ -161,14 +186,14 @@ setMethod("build_tmb", "tmb_list", function(object) {
     random <<- c(random,"lam.re")
   }
 
+  object@TMB$parameter <- parameters
+  object@TMB$tmb.data <- tmb.data
   obj <- RTMB::MakeADFun(f_CJS_list,
                          random = random,
                          parameters)
-
+  #
   opt <- nlminb(obj$par, obj$fn, obj$gr)
-
-  object@TMB$parameter <- parameters
-  object@TMB$tmb.data <- tmb.data
+  #
   object@TMB$obj <- obj
   object@TMB$opt <- opt
   if(object@MR_settings$make_sd){
@@ -181,7 +206,7 @@ setMethod("build_tmb", "tmb_list", function(object) {
 
 
 setMethod("plot", signature(obj = "tmb_list", y = "missing"),
-          function(obj, var = NULL, factor = NULL, nr = 20, process = "p", type = NULL, ...) {
+          function(obj, var = NULL, color = NULL, factor = NULL, nr = 20, process = "p", type = NULL, ...) {
             plot_output <- list()
 
             # Helper function to create prediction data frame
@@ -209,13 +234,13 @@ setMethod("plot", signature(obj = "tmb_list", y = "missing"),
             par_names <- names(obj@TMB$opt$par)
 
             if (type == "response") {
-              v <- obj@raw_data[, var]
+              v <- obj@MR_settings$data[, var]
               slot_name <- paste0("MR_settings")
               f <- slot(obj, slot_name)
               term_obj <- terms(formula(f$frms[process][[1]]))
               predictor_terms <- attr(term_obj, "term.labels")
               var_form <- predictor_terms[grep(var, predictor_terms)]
-              var_transform <- eval(parse(text = var_form), obj@raw_data)
+              var_transform <- eval(parse(text = var_form), obj@MR_settings$data)
 
               slot_value <- slot(obj, paste0(process, ".lm.form"))
               var_seq <- seq(min(v), max(v), length.out = nr)
@@ -240,6 +265,14 @@ setMethod("plot", signature(obj = "tmb_list", y = "missing"),
               int <- obj@TMB$opt$par[par_names%in%paste0(process, '.list.b')][1]
               se_int <- diag(obj@TMB$sd$cov.fixed)[par_names %in% paste0(process, '.list.b')][1]
 
+
+              my_names <- rownames(slot(obj, paste0(process,'.lm.form'))[[paste0(process,'.lm.form')]]$reTrms$Zt)
+              my_names_df <- data.frame(do.call(rbind,strsplit(my_names, ":")))
+              col_names <- slot(obj, paste0(process,'.lm.form'))[[paste0(process,'.lm.form')]]$reTrms$nl
+              print(col_names)
+
+              names(my_names_df) <- strsplit(names(col_names), ":")[[1]]
+              print(head(my_names_df))
               re_list <- obj@TMB$obj$env$parList()[names(obj@TMB$obj$env$parList()) %in% obj@TMB$obj$env$.random]
               re_names <- rep(names(re_list), sapply(re_list, length))
               est <- re_list[[paste0(process, '.re')]] + int
@@ -247,13 +280,12 @@ setMethod("plot", signature(obj = "tmb_list", y = "missing"),
               upr <- est + 1.96 * (se + se_int)
               lwr <- est - 1.96 * (se + se_int)
 
-              plot_df <- data.frame(est, lwr, upr)
+              plot_df <- data.frame(my_names_df, est, lwr, upr)
+
               p <- plot_df %>%
-                ggplot2::ggplot(aes(x = 1:length(est), y = plogis(est)), fill = "grey") +
-                geom_point() +
+                ggplot2::ggplot(aes(x = y_i, y = plogis(est)), fill = "grey") +
                 ylab(process) +
                 ylim(0, 1) +
-                geom_errorbar(aes(ymin = plogis(lwr), ymax = plogis(upr)), alpha = 0.5) +
                 theme_classic()
 
               if (process == "phi") {
@@ -262,6 +294,18 @@ setMethod("plot", signature(obj = "tmb_list", y = "missing"),
               if (process == "p") {
                 p <- p + ylab("Detection probability")
               }
+              if(!is.null(color)){
+                p <- p +
+                  geom_point(aes(color=get(color)), position = position_dodge(width = 0.5)) +
+                  geom_errorbar(aes(ymin = plogis(lwr), ymax = plogis(upr), color = get(color)),
+                                position = position_dodge(width = 0.5),
+                                width = 0.5) +
+                  theme(axis.text.x = element_text(angle = 90))
+              }else{
+                p <- p +
+                  geom_point() +
+                  geom_errorbar(aes(ymin = plogis(lwr), ymax = plogis(upr)), alpha = 0.5)
+              }
               plot_output$p <- p
               plot_output$plot_df <- plot_df
             }
@@ -269,7 +313,7 @@ setMethod("plot", signature(obj = "tmb_list", y = "missing"),
             print(plot_output$p)
             return(invisible(plot_output))
           })
-
+#
 
 #' AIC
 #'

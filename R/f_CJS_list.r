@@ -9,33 +9,36 @@ f_CJS_list <- function(parms){
   phi <- matrix(0,nrow(ch),ncol(ch))
   lam <- rep(0,ncol(ch))
 
-  # lam <- lam.mat%*%lam.b
-  for(i in 1:length(phi.list)){
+  for(i in 1:length(lam.list)){
     lam[i] <- lam.list[[i]]%*%lam.list.b
   }
   if(lam.model_type=="lme"){
     lam <- lam + t(lam.Zt) %*% lam.re
   }
 
+
   for(i in 1:length(p.list)){
-    p[i,2] <- p.list[[i]]%*%p.list.b
-    if(!is.null(dim(p.Zt))){
-      p[i,2] <- p[i,2] + t(p.Zt[,i]) %*% p.re
+    for(j in 1:nrow(p.list[[i]])){
+      p[i,j+1] <- p.list[[i]][j,]%*%p.list.b
+      if(!is.null(dim(p.Zt))){
+        p[i,j+1] <- p[i,j+1] + t(p.Zt[,i]) %*% p.re
+      }
     }
   }
-  p[,2] <- RTMB::plogis(p[,2])
-  p[,3] <- RTMB::plogis(lam)
+  p[,ncol(ch)] <- lam
+  p <- RTMB::plogis(p)
 
 
-  # phi[,2] <- phi.mat%*%phi.b
   for(i in 1:length(phi.list)){
-    phi[i,2] <- phi.list[[i]]%*%phi.list.b
+    for(j in 1:nrow(phi.list[[i]])){
+      phi[i,j+1] <- phi.list[[i]][j,]%*%phi.list.b
+      if(phi.model_type=="lme"){
+        phi[i,j+1] <- phi[i,j+1] + t(phi.Zt[,i]) %*% phi.re
+      }
+    }
   }
-  if(phi.model_type=="lme"){
-    phi[,2] <- phi[,2] + t(phi.Zt) %*% phi.re
-  }
-  phi[,2] <- RTMB::plogis(phi[,2])
-  phi[,3] <- RTMB::plogis(lam)
+  phi[,ncol(ch)] <- lam
+  phi <- RTMB::plogis(phi)
 
 
   chi <- rep(0, nrow(ch))
@@ -59,15 +62,15 @@ f_CJS_list <- function(parms){
   }
 
   if(p.model_type=="lme"){
-    nll <- nll - sum(RTMB::dnorm(p.re,0,exp(p.re.sig),log=TRUE))
+    nll <- nll - sum(RTMB::dnorm(p.re,0,exp(p.re.sig[p.Lind]),log=TRUE))
     RTMB::REPORT(p.re)
   }
   if(phi.model_type=="lme"){
-    nll <- nll - sum(RTMB::dnorm(phi.re,0,exp(phi.re.sig),log=TRUE))
+    nll <- nll - sum(RTMB::dnorm(phi.re,0,exp(phi.re.sig[phi.Lind]),log=TRUE))
     RTMB::REPORT(phi.re)
   }
   if(lam.model_type=="lme"){
-    nll <- nll - sum(RTMB::dnorm(lam.re,0,exp(lam.re.sig),log=TRUE))
+    nll <- nll - sum(RTMB::dnorm(lam.re,0,exp(lam.re.sig[lam.Lind]),log=TRUE))
     RTMB::REPORT(lam.re)
   }
 
@@ -76,9 +79,6 @@ f_CJS_list <- function(parms){
   RTMB::REPORT(chi)
   RTMB::REPORT(p)
 
-  # if(model_type=="lme"){
-  #   RTMB::REPORT(re)
-  # }
   return(nll)
 }
 
