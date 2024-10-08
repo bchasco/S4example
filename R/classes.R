@@ -14,22 +14,10 @@ setClass(
 #'
 #' @slot raw_data A list of data.
 #' @slot TMB
-#' @slot vars Predictor and response variables
-#' @slot lm.form List of dsign matrices based on formula
 #' @slot p.lm.form List of dsign matrices based on formula
 #' @slot phi.lm.form List of dsign matrices based on formula
 #' @slot lam.lm.form List of dsign matrices based on formula
-#' @slot formula A formula for the model
-#' @slot p.frm A formula for the model
-#' @slot phi.frm A formula for the model
-#' @slot phi.tmp.frm A formula for the model
-#' @slot lam.tmp.frm A formula for the model
-#' @slot p.tmp.frm A formula for the model
-#' @slot lam.frm A formula for the model
-#' @slot phi.list A list of predictor matrices for phi
-#' @slot lam.list A list of predictor matrices for phi
 #' @slot MR_settings A list of mark-recapture settings
-#' @slot plot A list of plotting objects
 #' @export
 setClass("tmb_list",
          slots = list(

@@ -5,8 +5,8 @@ f_CJS_list <- function(parms){
 
   nll <- 0
   # pred <- rep(0,nrow(p.mat))
-  p <- matrix(0,nrow(ch),ncol(ch))
-  phi <- matrix(0,nrow(ch),ncol(ch))
+  p <- matrix(Inf,nrow(ch),ncol(ch))
+  phi <- matrix(Inf,nrow(ch),ncol(ch))
   lam <- rep(0,ncol(ch))
 
   for(i in 1:length(lam.list)){
@@ -54,23 +54,23 @@ f_CJS_list <- function(parms){
   for(i in 1:nrow(ch)){
     if(U[i]>1){
       for(j in 2:U[i]){
-        nll <- nll - RTMB::dbinom(1,1,phi[i,j],log=TRUE) * n[i]
-        nll <- nll - RTMB::dbinom(ch[i,j],1,p[i,j],log=TRUE)  * n[i]
+        nll <- nll - RTMB::dbinom(1, 1, phi[i,j],log=TRUE) * n[i]
+        nll <- nll - RTMB::dbinom(ch[i,j], 1, p[i,j],log=TRUE)  * n[i]
       }
     }
     nll <- nll - RTMB::dbinom(1,1,chi[i],log=TRUE) * n[i]
   }
 
   if(p.model_type=="lme"){
-    nll <- nll - sum(RTMB::dnorm(p.re,0,exp(p.re.sig[p.Lind]),log=TRUE))
+    nll <- nll - sum(RTMB::dnorm(p.re, 0, exp(p.re.sig[p.Lind]), log=TRUE))
     RTMB::REPORT(p.re)
   }
   if(phi.model_type=="lme"){
-    nll <- nll - sum(RTMB::dnorm(phi.re,0,exp(phi.re.sig[phi.Lind]),log=TRUE))
+    nll <- nll - sum(RTMB::dnorm(phi.re, 0, exp(phi.re.sig[phi.Lind]), log=TRUE))
     RTMB::REPORT(phi.re)
   }
   if(lam.model_type=="lme"){
-    nll <- nll - sum(RTMB::dnorm(lam.re,0,exp(lam.re.sig[lam.Lind]),log=TRUE))
+    nll <- nll - sum(RTMB::dnorm(lam.re, 0, exp(lam.re.sig[lam.Lind]), log=TRUE))
     RTMB::REPORT(lam.re)
   }
 
@@ -78,6 +78,30 @@ f_CJS_list <- function(parms){
   RTMB::REPORT(phi)
   RTMB::REPORT(chi)
   RTMB::REPORT(p)
+
+
+  y_i <- as.integer(factor(raw$Year, levels = sort(unique(raw$Year))))
+  loc_i <- as.integer(factor(raw$loc, levels = locs))
+  rs_i <- as.integer(factor(raw$ReleaseSite))
+
+  df <- array(0, c(length(unique(y_i)),length(unique(loc_i))+1, length(unique(rs_i))))
+  print(dim(df))
+  # print(list(y_i = levels(y_i), loc_i = c(levels(loc_i),'lam'), rs_i = levels(rs_i)))
+  # dimnames(df) <- list(y_i = sort(unique(raw$Year)), loc_i = locs, rs_i = levels(factor(raw$ReleaseSite))
+
+  # names(df) <- locs
+  for(i in 1:nrow(raw)){
+    df[y_i[i],loc_i[i]-1,rs_i[i]] <- df[y_i[i],loc_i[i]-1,rs_i[i]] + prod(phi[i,1:loc_i[i]]) * p[i,loc_i[i]] * n[i]
+  }
+  for(i in 1:nrow(raw)){
+    df[y_i[i],max(loc_i),rs_i[i]] <- df[y_i[i],max(loc_i),rs_i[i]] + prod(phi[i,1:(max(loc_i)+1)]) * p[i,(max(loc_i)+1)] * n[i]
+  }
+  # sm <- aggregate(df[,locs],by=list(year = raw$Year),sum)[,locs[2:length(locs)]]
+  RTMB::REPORT(df)
+  RTMB::REPORT(y_i)
+  RTMB::REPORT(loc_i)
+  RTMB::ADREPORT(df)
+  # RTMB::ADREPORT(do.call("C",sm))
 
   return(nll)
 }

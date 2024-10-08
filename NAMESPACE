@@ -4,6 +4,7 @@ exportClasses("tmb_model",
 exportMethods('make_tmb_lists',
               'build_tmb',
               'plot',
+              'response_plot',
               'AIC')
 importFrom("stats", "lm", "rnorm", "runif", 'dnorm')
 import('RTMB','lme4', 'ggplot2', 'tidyr', 'dplyr')

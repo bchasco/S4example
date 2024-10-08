@@ -10,6 +10,11 @@ setGeneric("AIC", function(object) standardGeneric("AIC"))
 setGeneric("plot", function(obj, y = NULL, ...) {
   standardGeneric("plot")
 })
+
+setGeneric("response_plot", function(obj, y = NULL, ...) {
+  standardGeneric("response_plot")
+})
+
 #AIC calculation
 setGeneric("AIC", function(object) standardGeneric("AIC"))
 
@@ -168,6 +173,10 @@ setMethod("build_tmb", "tmb_list", function(object) {
     tmb.data[['p.list']][[i]] <<- as.matrix(object@p.lm.form$p.mat[[i]])
   }
 
+  tmb.data[['raw']] <<- object@phi.lm.form$phi.data
+  tmb.data[['locs']] <<- object@MR_settings$locs
+
+
   parameters <<- list()
   # parameters[['b']] <<- object@parameters[[1]]
   for(i in names(object@parameters)){
@@ -196,6 +205,8 @@ setMethod("build_tmb", "tmb_list", function(object) {
   #
   object@TMB$obj <- obj
   object@TMB$opt <- opt
+  object@TMB$AIC <- AIC(object)
+
   if(object@MR_settings$make_sd){
     object@TMB$sd <- RTMB::sdreport(obj)
   }
@@ -206,7 +217,7 @@ setMethod("build_tmb", "tmb_list", function(object) {
 
 
 setMethod("plot", signature(obj = "tmb_list", y = "missing"),
-          function(obj, var = NULL, color = NULL, factor = NULL, nr = 20, process = "p", type = NULL, ...) {
+          function(obj, x = NULL, var = NULL, re_ef = NULL, color = NULL, factor = NULL, nr = 20, process = "p", type = NULL, ...) {
             plot_output <- list()
 
             # Helper function to create prediction data frame
@@ -266,24 +277,27 @@ setMethod("plot", signature(obj = "tmb_list", y = "missing"),
               se_int <- diag(obj@TMB$sd$cov.fixed)[par_names %in% paste0(process, '.list.b')][1]
 
 
-              my_names <- rownames(slot(obj, paste0(process,'.lm.form'))[[paste0(process,'.lm.form')]]$reTrms$Zt)
-              my_names_df <- data.frame(do.call(rbind,strsplit(my_names, ":")))
-              col_names <- slot(obj, paste0(process,'.lm.form'))[[paste0(process,'.lm.form')]]$reTrms$nl
-              print(col_names)
+              cnms <- names(slot(obj, paste0(process,'.lm.form'))[[paste0(process,'.lm.form')]]$reTrms$cnms)
+              cnms_idx <- which(cnms%in%re_ef)
+              Lind <- slot(obj, paste0(process,'.lm.form'))[[paste0(process,'.lm.form')]]$reTrms$Lind
 
+              my_names <- slot(obj, paste0(process,'.lm.form'))[[paste0(process,'.lm.form')]]$reTrms$flist[[cnms_idx]]
+              my_names_df <- data.frame(do.call(rbind,strsplit(levels(my_names), ":")))
+              col_names <- slot(obj, paste0(process,'.lm.form'))[[paste0(process,'.lm.form')]]$reTrms$nl[cnms_idx]
               names(my_names_df) <- strsplit(names(col_names), ":")[[1]]
-              print(head(my_names_df))
+
               re_list <- obj@TMB$obj$env$parList()[names(obj@TMB$obj$env$parList()) %in% obj@TMB$obj$env$.random]
               re_names <- rep(names(re_list), sapply(re_list, length))
-              est <- re_list[[paste0(process, '.re')]] + int
-              se <- obj@TMB$sd$diag.cov.random[re_names %in% paste0(process, '.re')]
+              est <- re_list[[paste0(process,".re")]][Lind==cnms_idx] + int
+              se <- obj@TMB$sd$diag.cov.random[re_names %in% paste0(process, '.re')][Lind==cnms_idx]
               upr <- est + 1.96 * (se + se_int)
               lwr <- est - 1.96 * (se + se_int)
 
               plot_df <- data.frame(my_names_df, est, lwr, upr)
+              print("test")
 
               p <- plot_df %>%
-                ggplot2::ggplot(aes(x = y_i, y = plogis(est)), fill = "grey") +
+                ggplot2::ggplot(aes(x = !!ggplot2::sym(x), y = plogis(est)), fill = "grey") +
                 ylab(process) +
                 ylim(0, 1) +
                 theme_classic()
@@ -330,3 +344,189 @@ setMethod("AIC", "tmb_list", function(object) {
   AICc <- 2 * nll + 2 * K +(2 * K * ( K + 1) )/(n - K  - 1)
   return(AICc)  # Return the updated object with results
 })
+
+
+
+
+#' response_plot
+#'
+#' Plot the marginal response plots
+#'
+#' @param object A tmb list.
+#' @return The ggplot
+#' @export
+setMethod("response_plot", signature(obj = "tmb_list", y = "missing"),
+          function(obj, var = NULL, color = NULL, factor = NULL, nr = 20, process = "p", type = NULL, ...) {
+            plot_output <- list()
+
+            if(!is.null(var)){
+              v <- obj@MR_settings$data[, var]  # Extract the variable data
+
+              # Access the formula terms dynamically from the S4 slot
+              slot_name <- 'MR_settings'  # Slot name for settings
+              f <- slot(obj, slot_name)  # Extract slot
+              term_obj <- terms(formula(f$frms[process][[1]]))  # Extract terms
+
+              # Extract predictor variables
+              predictor_terms <- attr(term_obj, "term.labels")
+              var_form <- predictor_terms[grep(var, predictor_terms)]  # Get formula for the variable
+              var_transform <- eval(parse(text = var_form), obj@MR_settings$data)  # Apply transformation
+
+              # Extract relevant columns for factors in the model
+              slot_name <- paste0(process,".lm.form")
+              slot_list <- slot(obj, slot_name)
+              mod_factors <- names(attr(slot_list[[slot_name]]$X, "contrasts"))
+              mod_factor_cols <- grep(paste(mod_factors, collapse = "|"), names(slot_list[[paste0(process,'.mat')]][[1]]))
+
+              # Get the "assign" attribute
+              assign_attr <- attr(slot_list[[slot_name]]$X, "assign")
+              terms_labels <- attr(terms(formula(obj@MR_settings$frms[[process]])), "term.labels")
+
+              # Create a prediction data frame based on mean values
+              pred_df <- matrix(colMeans(slot_list[[slot_name]]$X),
+                                nrow = nr,
+                                ncol = ncol(slot_list[[slot_name]]$X),
+                                byrow = TRUE)
+
+              # Set factor columns to 0 and generate a sequence for the variable
+              pred_df[, mod_factor_cols] <- 0
+              my_seq <- seq(min(v), max(v), length.out = nr)
+              pred_df[, grep(var, colnames(slot_list[[slot_name]]$X))] <- predict(var_transform, my_seq)
+
+              # Initialize data frames for predictions and standard errors
+              pred_var <- data.frame(var = my_seq)
+              pred_sd <- data.frame(var = my_seq)
+              names(pred_var) <- var
+              names(pred_sd) <- var
+
+              # Initialize counters
+              icnt <- 2
+              par_idx <- grep(paste0(process, ".list.b"), names(obj@TMB$opt$par))
+
+              # Loop over factors to compute predictions and standard errors
+              fact_loop <- c(1)
+              if(!is.null(factor))(
+                fact_loop <- c(fact_loop,mod_factor_cols)
+              )
+              for (i in fact_loop) {
+                tmp_df <- pred_df
+                tmp_df[, i] <- 1  # Set the factor column to 1 for the current factor
+
+                # Calculate predicted values
+                pred_var[, icnt] <- as.data.frame(tmp_df %*% tmb_model@TMB$opt$par[names(tmb_model@TMB$opt$par) %in% paste0(process, '.list.b')])
+
+                # Calculate variances and standard errors
+                variances <- diag(tmp_df %*% obj@TMB$sd$cov.fixed[par_idx, par_idx] %*% t(tmp_df))
+                standard_error <- sqrt(variances)
+                pred_sd[, icnt] <- standard_error
+                if(!is.null(factor)){
+                  names(pred_var)[icnt] <- unique(slot_list[[paste0(process,'.data')]][, factor])[icnt - 1, 1]
+                  names(pred_sd)[icnt] <- unique(slot_list[[paste0(process,'.data')]][, factor])[icnt - 1, 1]
+                }
+
+                icnt <- icnt + 1
+              }
+
+              # Reshape the predictions and standard errors using pivot_longer
+              pred_var <- pred_var %>%
+                pivot_longer(cols = -all_of(var), names_to = "factor", values_to = "est")
+
+              pred_sd <- pred_sd %>%
+                pivot_longer(cols = -all_of(var), names_to = "factor", values_to = "sd") %>%
+                select(sd)
+              # Combine predictions and standard errors
+              pred_var <- cbind(pred_var, pred_sd)
+
+
+              # Plot the results with ggplot2
+              p <- pred_var %>%
+                ggplot(aes(x = !!sym(var), y = plogis(est), fill = factor)) +
+                geom_line(aes(color = factor), size = 1.2) +
+                ylab(process) +
+                geom_ribbon(aes(ymin = plogis(est - 1.96 * sd), ymax = plogis(est + 1.96 * sd)), alpha = 0.3) +
+                theme_classic()
+              print(p)
+
+            }else{
+              slot_name <- paste0(process,".lm.form")
+              slot_list <- slot(obj, slot_name)
+              mod_factors <- names(attr(slot_list[[slot_name]]$X, "contrasts"))
+              mod_factor_cols <- grep(paste(mod_factors, collapse = "|"), names(slot_list[[paste0(process,'.mat')]][[1]]))
+
+              # Get the "assign" attribute
+              assign_attr <- attr(slot_list[[slot_name]]$X, "assign")
+              terms_labels <- attr(terms(formula(obj@MR_settings$frms[[process]])), "term.labels")
+
+              # Create a prediction data frame based on mean values
+              pred_df <- matrix(colMeans(slot_list[[slot_name]]$X),
+                                nrow = 1,
+                                ncol = ncol(slot_list[[slot_name]]$X),
+                                byrow = TRUE)
+
+              # Set factor columns to 0 and generate a sequence for the variable
+              pred_df[, mod_factor_cols] <- 0
+
+
+              pred_var <- data.frame(var = 1)
+              pred_sd <- data.frame(var = 1)
+              names(pred_var) <- 1
+              names(pred_sd) <- 1
+
+              # Initialize counters
+              icnt <- 1
+              par_idx <- grep(paste0(process, ".list.b"), names(obj@TMB$opt$par))
+
+              my_factor_names <- levels(as.factor(as.matrix(slot_list[[paste0(process,'.data')]][, factor])))
+              # Loop over factors to compute predictions and standard errors
+              fact_loop <- c(1)
+              if(!is.null(factor))(
+                fact_loop <- c(fact_loop,mod_factor_cols)
+              )
+              for (i in fact_loop) {
+                tmp_df <- pred_df
+                tmp_df[, i] <- 1  # Set the factor column to 1 for the current factor
+
+                # Calculate predicted values
+                pred_var[, icnt] <- as.data.frame(tmp_df %*% tmb_model@TMB$opt$par[names(tmb_model@TMB$opt$par) %in% paste0(process, '.list.b')])
+
+                # Calculate variances and standard errors
+                variances <- diag(tmp_df %*% obj@TMB$sd$cov.fixed[par_idx, par_idx] %*% t(tmp_df))
+                standard_error <- sqrt(variances)
+                pred_sd[, icnt] <- standard_error
+                if(!is.null(factor)){
+                  names(pred_var)[icnt] <- my_factor_names[icnt]
+                  names(pred_sd)[icnt] <- my_factor_names[icnt]
+                }
+
+                icnt <- icnt + 1
+              }
+
+              # Reshape the predictions and standard errors using pivot_longer
+              pred_var <- pred_var %>%
+                pivot_longer(cols = -all_of(var), names_to = "factor", values_to = "est")
+
+              pred_sd <- pred_sd %>%
+                pivot_longer(cols = -all_of(var), names_to = "factor", values_to = "sd") %>%
+                select(sd)
+              # Combine predictions and standard errors
+              pred_var <- cbind(pred_var, pred_sd)
+
+
+              # Plot the results with ggplot2
+              p <- pred_var %>%
+                ggplot(aes(x = factor, y = plogis(est), fill = factor)) +
+                geom_point(aes(color = factor), size = 1.2) +
+                ylab(process) +
+                xlab(factor) +
+                geom_errorbar(aes(ymin = plogis(est - 1.96 * sd), ymax = plogis(est + 1.96 * sd)),
+                              alpha = 0.3,
+                              width = 0.25) +
+                theme_classic()
+              print(p)
+
+            }
+
+          return(p)
+
+          })
+
