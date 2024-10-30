@@ -30,19 +30,15 @@ setGeneric("AIC", function(object) standardGeneric("AIC"))
 setMethod("make_tmb_lists", "tmb_list", function(object) {
 
 
-  for(i in c('p','phi','lam')){
-
-
-    if(i!='lam'){
-      state_loc <- object@MR_settings$locs[1]
-    }else{
-      state_loc <- object@MR_settings$locs[length(object@MR_settings$locs)]
-    }
+  for(i in names(object@MR_settings$frms)){
 
     i.lm.form <- paste0(i,'.lm.form')
     i.loc <-  paste0(i,'.loc')
     i.mat <-  paste0(i,'.mat')
+
+
     locs <- object@MR_settings$locs
+
     assign(i.loc,
            object@MR_settings$data %>%
             mutate(id = row_number()) %>%
@@ -50,10 +46,14 @@ setMethod("make_tmb_lists", "tmb_list", function(object) {
             pivot_longer(cols = !!locs,
                          names_to = 'loc',
                          values_to = 'state') %>%
-            mutate(loc = factor(loc, levels = locs))# %>%
+            mutate(loc = factor(loc, levels = locs)) %>%
+            mutate(state_i = factor(state)) %>%
+            mutate(int = 1)
 
             # filter(loc %in% object$MR_settings$locs[2:(length(object$MR_settings$locs)-1)]))
            )
+
+    # get(i.loc)$state_i <- as.factor(get(i.loc)$state)
     if(i=='lam'){
       temp_data <- get(i.loc) %>%
         filter(loc %in% c(locs[length(locs)])) %>%
@@ -65,15 +65,15 @@ setMethod("make_tmb_lists", "tmb_list", function(object) {
         filter(loc %in% c(locs[2:(length(locs)-1)])) %>%
         droplevels()
       # Now assign it back
-      assign(i.loc, temp_data)    }
+      assign(i.loc, temp_data)
+      }
 
-    #
     assign(i.lm.form,
            tryCatch(lme4::lFormula(formula(object@MR_settings$frms[i][[1]]), get(i.loc)),
                     error = function(e) e,
                     warning = function(w) w)
            )
-  #
+
     if(length(get(i.lm.form)$message)>0){
       # No random-effects
       assign(i.lm.form,
@@ -85,7 +85,7 @@ setMethod("make_tmb_lists", "tmb_list", function(object) {
                       mutate(id = get(paste0(i,'.loc'))$id) %>%
                       group_by(id) %>%
                       summarise(y_values = list(pick(everything()))))
-  #
+
       assign(i.lm.form, list(X = get(i.lm.form)))
       slot(object,i.lm.form)[[paste0(i,'.data')]] <- get(i.loc)
       slot(object,i.lm.form)[[paste0(i,'.mat')]] <- get(i.mat)[[2]]
@@ -106,10 +106,23 @@ setMethod("make_tmb_lists", "tmb_list", function(object) {
       slot(object,i.lm.form)[[paste0(i,'.Lind')]] <- get(paste0(i,'.mat'))[[2]]
     }
 
+    ncol_design_matrix <- ncol(slot(object,i.lm.form)[[paste0(i,'.mat')]][[1]])
     if(slot(object, i.lm.form)[[paste0(i,".model_type")]] == "lm"){
-      slot(object,'parameters')[[paste0(i,'.list.b')]] <- rep(0,ncol(slot(object,i.lm.form)[[paste0(i,'.mat')]][[1]]))
+      if(i!="eta" & i!="lam"){ #not state specific
+        print(i)
+        n_states <- length(object@MR_settings$states)-1
+        slot(object,'parameters')[[paste0(i,'.list.b')]] <- matrix(0,n_states,ncol_design_matrix)
+      }else{
+        slot(object,'parameters')[[paste0(i,'.list.b')]] <- rep(0,ncol_design_matrix)
+      }
+
     }else{
-      slot(object,'parameters')[[paste0(i,'.list.b')]] <- rep(0,ncol(slot(object,i.lm.form)[[paste0(i,'.mat')]][[1]]))
+      if(i!="eta"){
+        n_states <- length(object@MR_settings$states)-1
+        slot(object,'parameters')[[paste0(i,'.list.b')]] <- matrix(0,n_states,ncol_design_matrix)
+      }else{
+        slot(object,'parameters')[[paste0(i,'.list.b')]] <- rep(0,ncol_design_matrix)
+      }
       slot(object,'parameters')[[paste0(i,'.re')]] <- rep(0,nrow(slot(object,i.lm.form)[[i.lm.form]]$reTrms$Zt))
       slot(object,'parameters')[[paste0(i,'.re.sig')]] <- rep(0,length(slot(object,i.lm.form)[[i.lm.form]]$reTrms$cnms))
     }
@@ -130,7 +143,7 @@ setMethod("build_tmb", "tmb_list", function(object) {
   tmb.data <<- list() #create in .GlobalEnv
   tmb.data[['n']] <<- object@MR_settings$data$n
   if("reTrms" %in% names(object@phi.lm.form$phi.lm.form)){
-      tmb.data[['phi.Zt']] <<- as.matrix(object@phi.lm.form$phi.lm.form$reTrms$Zt)
+      tmb.data[['phi.Zt']] <<- Matrix::Matrix(object@phi.lm.form$phi.lm.form$reTrms$Zt, sparse = TRUE)
       tmb.data[['phi.Lind']] <<- as.matrix(object@phi.lm.form$phi.lm.form$reTrms$Lind)
   }else{
     tmb.data[['phi.Zt']] <<- NA
@@ -138,7 +151,7 @@ setMethod("build_tmb", "tmb_list", function(object) {
   tmb.data[['phi.model_type']] <<- object@phi.lm.form$phi.model_type
 
   if("reTrms" %in% names(object@p.lm.form$p.lm.form)){
-    tmb.data[['p.Zt']] <<- as.matrix(object@p.lm.form$p.lm.form$reTrms$Zt)
+    tmb.data[['p.Zt']] <<- Matrix::Matrix(object@p.lm.form$p.lm.form$reTrms$Zt, sparse = TRUE)
     tmb.data[['p.Lind']] <<- as.matrix(object@p.lm.form$p.lm.form$reTrms$Lind)
   }else{
     tmb.data[['p.Zt']] <<- NA
@@ -154,8 +167,16 @@ setMethod("build_tmb", "tmb_list", function(object) {
   tmb.data[['lam.model_type']] <<- object@lam.lm.form$lam.model_type
 
 
+  if("reTrms" %in% names(object@eta.lm.form$eta.lm.form)){
+    tmb.data[['eta.Zt']] <<- as.matrix(object@eta.lm.form$eta.lm.form$reTrms$Zt)
+    tmb.data[['eta.Lind']] <<- as.matrix(object@eta.lm.form$eta.lm.form$reTrms$Lind)
+  }else{
+    tmb.data[['eta.Zt']] <<- NA
+  }
+  tmb.data[['eta.model_type']] <<- object@eta.lm.form$eta.model_type
 
-  tmb.data[['ch']] <<- as.matrix(object@MR_settings$data[,object@MR_settings$locs])
+
+  tmb.data[['ch']] <<- as.data.frame(object@MR_settings$data[,object@MR_settings$locs])
   tmb.data[["U"]] <<- apply(tmb.data[['ch']],1,function(x){max(which(x>0,arr.ind = TRUE))})
 
   tmb.data[['phi.list']] <<- list()
@@ -173,16 +194,26 @@ setMethod("build_tmb", "tmb_list", function(object) {
     tmb.data[['p.list']][[i]] <<- as.matrix(object@p.lm.form$p.mat[[i]])
   }
 
-  tmb.data[['raw']] <<- object@phi.lm.form$phi.data
-  tmb.data[['locs']] <<- object@MR_settings$locs
+  tmb.data[['eta.list']] <<- list()
+  if(length(object@eta.lm.form)>1){
+    for(i in 1:length(object@eta.lm.form$eta.mat)){
+      tmb.data[['eta.list']][[i]] <<- as.matrix(object@eta.lm.form$eta.mat[[i]])
+    }
+  }
 
+  tmb.data[['raw']] <<- as.data.frame(object@phi.lm.form$phi.data)
+  tmb.data[['locs']] <<- object@MR_settings$locs
+  tmb.data[['MR_settings']] <<- object@MR_settings
+  tmb.data[["init"]] <<- object@MR_settings$data$init
+  tmb.data[["init_state"]] <<- object@MR_settings$data$init_state
+  tmb.data[["init_loc"]] <<- object@MR_settings$data$init_loc
 
   parameters <<- list()
   # parameters[['b']] <<- object@parameters[[1]]
   for(i in names(object@parameters)){
     parameters[[i]] <<- object@parameters[[i]]
   }
-  environment(f_CJS_list) <- .GlobalEnv
+  environment(f) <- .GlobalEnv
 
   random <<- c()
   if(tmb.data$p.model_type=="lme"){
@@ -194,10 +225,15 @@ setMethod("build_tmb", "tmb_list", function(object) {
   if(tmb.data$lam.model_type=="lme"){
     random <<- c(random,"lam.re")
   }
+  if(tmb.data$eta.model_type=="lme"){
+    random <<- c(random,"eta.re")
+  }
+
+  tmb.data$model_type <<- object@MR_settings$model_type
 
   object@TMB$parameter <- parameters
   object@TMB$tmb.data <- tmb.data
-  obj <- RTMB::MakeADFun(f_CJS_list,
+  obj <- RTMB::MakeADFun(f,
                          random = random,
                          parameters)
   #
@@ -273,8 +309,8 @@ setMethod("plot", signature(obj = "tmb_list", y = "missing"),
             }
 
             if (type == "re") {
-              int <- obj@TMB$opt$par[par_names%in%paste0(process, '.list.b')][1]
-              se_int <- diag(obj@TMB$sd$cov.fixed)[par_names %in% paste0(process, '.list.b')][1]
+              int <- obj@TMB$opt$par[par_names%in%paste0(process, '.list.b')]
+              se_int <- sqrt(diag(obj@TMB$sd$cov.fixed)[par_names %in% paste0(process, '.list.b')])
 
 
               cnms <- names(slot(obj, paste0(process,'.lm.form'))[[paste0(process,'.lm.form')]]$reTrms$cnms)
@@ -289,12 +325,11 @@ setMethod("plot", signature(obj = "tmb_list", y = "missing"),
               re_list <- obj@TMB$obj$env$parList()[names(obj@TMB$obj$env$parList()) %in% obj@TMB$obj$env$.random]
               re_names <- rep(names(re_list), sapply(re_list, length))
               est <- re_list[[paste0(process,".re")]][Lind==cnms_idx] + int
-              se <- obj@TMB$sd$diag.cov.random[re_names %in% paste0(process, '.re')][Lind==cnms_idx]
+              se <- sqrt(obj@TMB$sd$diag.cov.random[re_names %in% paste0(process, '.re')][Lind==cnms_idx])
               upr <- est + 1.96 * (se + se_int)
               lwr <- est - 1.96 * (se + se_int)
 
               plot_df <- data.frame(my_names_df, est, lwr, upr)
-              print("test")
 
               p <- plot_df %>%
                 ggplot2::ggplot(aes(x = !!ggplot2::sym(x), y = plogis(est)), fill = "grey") +
@@ -342,7 +377,8 @@ setMethod("AIC", "tmb_list", function(object) {
   K <- length(object@TMB$opt$par)
   nll <- object@TMB$opt$objective
   AICc <- 2 * nll + 2 * K +(2 * K * ( K + 1) )/(n - K  - 1)
-  return(AICc)  # Return the updated object with results
+  AIC <- 2 * nll + 2 * K
+  return(list(nll = nll, AIC = AIC, AICc = AICc))  # Return the updated object with results
 })
 
 
@@ -369,7 +405,9 @@ setMethod("response_plot", signature(obj = "tmb_list", y = "missing"),
 
               # Extract predictor variables
               predictor_terms <- attr(term_obj, "term.labels")
+              print(predictor_terms)
               var_form <- predictor_terms[grep(var, predictor_terms)]  # Get formula for the variable
+              print(var_form)
               var_transform <- eval(parse(text = var_form), obj@MR_settings$data)  # Apply transformation
 
               # Extract relevant columns for factors in the model

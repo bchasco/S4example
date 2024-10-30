@@ -27,6 +27,7 @@ setClass("tmb_list",
            p.lm.form = 'list',
            phi.lm.form = 'list',
            lam.lm.form = 'list',
+           eta.lm.form = 'list',
            plot = 'list'
          )
 )
